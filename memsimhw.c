@@ -31,63 +31,80 @@ struct procEntry {
     FILE *tracefp;
 };
 struct pageTableEntry {
-    unsigned addr;               //vpn
+    unsigned addr; //vpn
+    int pid;
     char rw;                     //read or write
     struct pageTableEntry *next; //make linked list
 };
 void oneLevelVMSim(struct procEntry *procTable, int type) {
     int i;
-    int frameCounter = 1;
-    struct pageTableEntry **first = malloc(sizeof(struct pageTableEntry) * numProcess);
-    int *fc = malloc(sizeof(int) * numProcess);
-
-    for (i = 0; i < numProcess; i++) {
-        first[i]->next = first[i];
-        fscanf(procTable[i].tracefp, "%x %c", &first[i]->addr, &first[i]->rw);
-        fc[i] = 1;
-    }
-    if (type == 0) {                                       //FIFO
-        while (!feof(procTable[numProcess - 1].tracefp)) { //process n 다읽으면
+    int fc = 1;
+    struct pageTableEntry *first = malloc(sizeof(struct pageTableEntry));
+    unsigned addrTemp;
+    char rwTemp;
+    fscanf(procTable[0].tracefp, "%x %c", &addrTemp, &rwTemp);
+    addrTemp = addrTemp / 4096;
+    first->pid = 0;
+    first->rw = rwTemp;
+    first->addr = addrTemp;
+    first->next = first;
+    procTable[0].numPageFault++;
+    procTable[0].ntraces++;
+    struct pageTableEntry *tail = first;
+    if (type == 0) {
+        for (int i = 1; i < numProcess; i++) {
+            struct pageTableEntry *newpage = malloc(sizeof(struct pageTableEntry));
+            fscanf(procTable[i].tracefp, "%x %c", &addrTemp, &rwTemp);
+            addrTemp = addrTemp / 4096;
+            newpage->addr = addrTemp;
+            newpage->rw = rwTemp;
+            newpage->pid = i;
+            procTable[i].numPageFault++;
+            procTable[i].ntraces++;
+            if (fc == nFrame) {
+                struct pageTableEntry *temppge = first;
+                first = first->next;
+                tail->next = newpage;
+                newpage->next = first;
+                tail = newpage;
+                free(temppge);
+            } else {
+                tail->next = newpage;
+                newpage->next = first;
+                tail = newpage;
+                fc++;
+            }
+        }
+        while (!feof(procTable[numProcess - 1].tracefp)) {
             for (i = 0; i < numProcess; i++) {
-                unsigned addrTemp;
-                char rwTemp;
                 fscanf(procTable[i].tracefp, "%x %c", &addrTemp, &rwTemp);
-
-                procTable[i].ntraces++; //trace 횟수 증가
-
-                struct pageTableEntry *curr = first[i];
-
-                while (1) {                       //hit 했나 검사
-                    if (curr->addr == addrTemp) { //hit!!
+                addrTemp = addrTemp / 4096;
+                procTable[i].ntraces++;
+                struct pageTableEntry *curr = first;
+                while (1) {
+                    if (curr->addr == addrTemp && curr->pid == i) {
                         procTable[i].numPageHit++;
                         break;
                     }
-
-                    if (curr->next == first[i]) { //page fault (새로 꺼내야함)
-
+                    if (curr == tail) {
+                        struct pageTableEntry *newpage = malloc(sizeof(struct pageTableEntry));
+                        newpage->addr = addrTemp;
+                        newpage->rw = rwTemp;
+                        newpage->pid = i;
                         procTable[i].numPageFault++;
-
-                        if (fc[i] == nFrame) { //자리 비켜줘야함
-                            struct pageTableEntry *dummy = first[i];
-                            struct pageTableEntry *newPage = malloc(sizeof(struct pageTableEntry));
-                            first[i] = first[i]->next;
-                            free(dummy); //first trace 제거
-
-                            curr->next = newPage;
-                            newPage->next = first[i];
-                            newPage->addr = addrTemp;
-                            newPage->rw = rwTemp;
-                            break;
-                        } else { //뒤에만 껴줄때
-                            fc[i]++;
-                            struct pageTableEntry *newPage = malloc(sizeof(struct pageTableEntry));
-                            curr->next = newPage;
-                            newPage->next = first[i];
-                            newPage->addr = addrTemp;
-                            newPage->rw = rwTemp;
-                            break;
+                        if (fc == nFrame) {
+                            struct pageTableEntry *temppge = first;
+                            first = first->next;
+                            free(temppge);
                         }
+
+                        tail->next = newpage;
+                        newpage->next = first;
+                        tail = newpage;
+                        procTable[i].numPageFault++;
+                        break;
                     }
+                    curr = curr->next;
                 }
             }
         }
@@ -102,7 +119,7 @@ void oneLevelVMSim(struct procEntry *procTable, int type) {
         printf("Proc %d Num of Page Faults %d\n", i, procTable[i].numPageFault);
         printf("Proc %d Num of Page Hit %d\n", i, procTable[i].numPageHit);
         fclose(procTable[i].tracefp);
-        assert(procTable[i].numPageHit + procTable[i].numPageFault == procTable[i].ntraces);
+        //assert(procTable[i].numPageHit + procTable[i].numPageFault == procTable[i].ntraces);
     }
 }
 void twoLevelVMSim(struct procEntry *procTable) {
@@ -136,30 +153,32 @@ void invertedPageVMSim(struct procEntry *procTable) {
 int main(int argc, char *argv[]) {
     int i, c, simType;
     struct procEntry *procTable = malloc(sizeof(struct procEntry) * argc);
-    printf("0번째 입니다.");
-    int mem = *argv[2];
-
-    for (i = 0; i < mem - 32; i++) {
+    int mem = atoi(argv[3]);
+    int check = 1;
+    for (i = 0; i < mem - 12; i++) {
         nFrame *= 2;
+        check *= 2;
     }
-
+    numProcess = argc - 4;
     // initialize procTable for Memory Simulations
     for (i = 0; i < numProcess; i++) {
 
         // opening a tracefile for the process
-        printf("process %d opening %s\n", i, argv[i + 3]);
-        procTable[i].tracefp = fopen(argv[i + 3], "r");
+        printf("process %d opening %s\n", i, argv[i + 4]);
+        procTable[i].tracefp = fopen(argv[i + 4], "r");
         if (procTable[i].tracefp == NULL) {
-            printf("ERROR: can't open %s file; exiting...", argv[i + 3]);
+            printf("ERROR: can't open %s file; exiting...", argv[i + 1]);
             exit(1);
         }
-        procTable[i].traceName = argv[i + 3];
+        procTable[i].traceName = argv[i + 4];
         procTable[i].numPageFault = 0;
         procTable[i].numPageHit = 0;
         procTable[i].ntraces = 0;
+        procTable[i].pid = i;
     }
+    long int nF = nFrame * 4096;
 
-    printf("Num of Frames %d Physical Memory Size %ld bytes\n", nFrame, (1L << nFrame * 4096));
+    printf("Num of Frames %d Physical Memory Size %ld bytes\n", nFrame, nF);
 
     if (simType == 0) {
         printf("=============================================================\n");

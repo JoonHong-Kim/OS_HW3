@@ -9,11 +9,12 @@
             "type": "cppdbg",
             "request": "launch",
             "program": "${fileDirname}//${fileBasenameNoExtension}",
+            "targetArchitecture": "x86_64",
             "args": [
                 "0",
                 "10",
                 "20",
-                ".//mtraces//gcc.trace"
+                "./mtraces/gcc.trace"
             ],
             "stopAtEntry": false,
             "cwd": "${workspaceFolder}",
