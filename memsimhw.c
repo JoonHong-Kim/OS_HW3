@@ -52,7 +52,7 @@ void oneLevelVMSim(struct procEntry *procTable, int type) {
     procTable[0].ntraces++;
     struct pageTableEntry *tail = first;
     if (type == 0) {
-        for (int i = 1; i < numProcess; i++) {
+        for (i = 1; i < numProcess; i++) {
             struct pageTableEntry *newpage = malloc(sizeof(struct pageTableEntry));
             fscanf(procTable[i].tracefp, "%x %c", &addrTemp, &rwTemp);
             addrTemp = addrTemp / 4096;
@@ -61,29 +61,34 @@ void oneLevelVMSim(struct procEntry *procTable, int type) {
             newpage->pid = i;
             procTable[i].numPageFault++;
             procTable[i].ntraces++;
+            tail->next = newpage;
+            newpage->next = first;
+            tail = newpage;
             if (fc == nFrame) {
                 struct pageTableEntry *temppge = first;
                 first = first->next;
-                tail->next = newpage;
-                newpage->next = first;
-                tail = newpage;
+
                 free(temppge);
             } else {
-                tail->next = newpage;
-                newpage->next = first;
-                tail = newpage;
+
                 fc++;
             }
         }
         while (!feof(procTable[numProcess - 1].tracefp)) {
             for (i = 0; i < numProcess; i++) {
+
                 fscanf(procTable[i].tracefp, "%x %c", &addrTemp, &rwTemp);
+
                 addrTemp = addrTemp / 4096;
-                procTable[i].ntraces++;
+
                 struct pageTableEntry *curr = first;
                 while (1) {
+                    if (feof(procTable[i].tracefp)) {
+                        break;
+                    }
                     if (curr->addr == addrTemp && curr->pid == i) {
                         procTable[i].numPageHit++;
+                        procTable[i].ntraces++;
                         break;
                     }
                     if (curr == tail) {
@@ -92,16 +97,18 @@ void oneLevelVMSim(struct procEntry *procTable, int type) {
                         newpage->rw = rwTemp;
                         newpage->pid = i;
                         procTable[i].numPageFault++;
+                        tail->next = newpage;
+                        newpage->next = first;
+                        tail = newpage;
+                        procTable[i].ntraces++;
                         if (fc == nFrame) {
                             struct pageTableEntry *temppge = first;
                             first = first->next;
                             free(temppge);
+                        } else {
+                            fc++;
                         }
 
-                        tail->next = newpage;
-                        newpage->next = first;
-                        tail = newpage;
-                        procTable[i].numPageFault++;
                         break;
                     }
                     curr = curr->next;
@@ -109,6 +116,7 @@ void oneLevelVMSim(struct procEntry *procTable, int type) {
             }
         }
     }
+
     if (type == 1) { //LRU
         for (i = 0; i < numProcess; i++) {
         }

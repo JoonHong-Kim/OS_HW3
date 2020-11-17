@@ -14,7 +14,9 @@
                 "0",
                 "10",
                 "20",
-                "./mtraces/gcc.trace"
+                "./mtraces/gcc.trace",
+                "./mtraces/bzip.trace",
+                "./mtraces/random0.trace"
             ],
             "stopAtEntry": false,
             "cwd": "${workspaceFolder}",
